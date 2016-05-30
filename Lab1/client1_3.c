@@ -1,7 +1,3 @@
-
-#include     "sockwrap.h"
-#include     "mysocket.h"
-#include     "errlib.h"
 #include "mylibrary.h"
 
 int main(int argc, char** argv) {
