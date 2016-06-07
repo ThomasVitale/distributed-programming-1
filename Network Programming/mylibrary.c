@@ -57,7 +57,7 @@ int mygetline(char* line, size_t maxline, char* string) {
 }
 
 /* Checks if the user inputs "end" or "stop" */
-int iscloseorstop(char *buf) {
+int isendorstop(char *buf) {
 	return (!strcmp(buf, "end\n") || !strcmp(buf, "stop\n"));
 }
 
