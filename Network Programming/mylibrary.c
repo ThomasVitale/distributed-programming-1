@@ -57,7 +57,7 @@ int mygetline(char* line, size_t maxline, char* string) {
 }
 
 /* Checks if the user inputs "end" or "stop" */
-int iscloseorstop(char *buf) {
+int isendorstop(char *buf) {
 	return (!strcmp(buf, "end\n") || !strcmp(buf, "stop\n"));
 }
 
@@ -422,10 +422,10 @@ ssize_t readlineS (SOCKET s, char *buf, size_t maxlen) {
 	    	if (c == '\n') {
 					break;
 				}
-	    } else if (nread == 0) {	/* connection closed by party */
+	    } else if (nread == 0) {	// connection closed by other party 
 	    		*buf = 0;
 	    		return (n-1);
-			} else {			/* error */
+			} else {	// error
 	    		return -1;
 	    }
     }
