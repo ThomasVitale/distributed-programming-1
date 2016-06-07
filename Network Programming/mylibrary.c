@@ -422,10 +422,10 @@ ssize_t readlineS (SOCKET s, char *buf, size_t maxlen) {
 	    	if (c == '\n') {
 					break;
 				}
-	    } else if (nread == 0) {	/* connection closed by party */
+	    } else if (nread == 0) {	// connection closed by other party 
 	    		*buf = 0;
 	    		return (n-1);
-			} else {			/* error */
+			} else {	// error
 	    		return -1;
 	    }
     }
