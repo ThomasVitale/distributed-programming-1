@@ -1,4 +1,4 @@
-#include "mylibrary.h"
+#include "../mylibrary.h"
 
 int main(int argc, char** argv) {
 
@@ -7,12 +7,12 @@ int main(int argc, char** argv) {
 	struct in_addr sIPaddr;					// server IP address structure
 	struct sockaddr_in saddr;				// server address structure
 	uint16_t tport_n, tport_h;			// server port number by htons()
-	uint32_t taddr_n; 							// server IP address by htonl()
-	struct timeval tval;
-	fd_set cset;
-	int len, fromlen, n, i, finished=0;
-	struct sockaddr_in from;				
-
+	struct timeval tval;						// for setting timeout
+	fd_set cset;										// socket set
+	socklen_t from_len;							// socket length	
+	int len, n, i, finished=0;
+	struct sockaddr_in from;		
+		
 	/* Check number of arguments */
 	checkArg(argc, 4);
 
@@ -24,14 +24,16 @@ int main(int argc, char** argv) {
 	tport_n = setPortarg(argv[2], &tport_h);
 
 	/* Create the socket */
-	fprintf(stdout, "Creating the socket\n");
+	fprintf(stdout, "Creating the socket...\n");
 	s = Socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	fprintf(stdout, "OK. Socket fd: %d\n", s);
+	fprintf(stdout, "- OK. Socket fd: %d\n", s);
 	
 	/* Prepare server address structure */
 	saddr.sin_family = AF_INET;
 	saddr.sin_port = tport_n;
 	saddr.sin_addr = sIPaddr;
+	
+	br();
 
 	/* Prepare the string to be sent */
 	strcpy(buf, argv[3]);
@@ -42,33 +44,33 @@ int main(int argc, char** argv) {
 	
 		/* Send a string */
 		Sendto(s, buf, len, 0, (struct sockaddr *) &saddr, sizeof(saddr));
-		fprintf(stdout, "Waiting for response...\n");
+		fprintf(stdout, "Data sent, waiting for response...\n");
 	
 		/* Set timeout */
 		FD_ZERO(&cset);
 		FD_SET(s, &cset);
 		tval.tv_sec = TIMEOUT;
 		tval.tv_usec = 0;
-		n = Select(FD_SETSIZE, &cset, NULL, NULL, &tval);
+		n = Select(s+1, &cset, NULL, NULL, &tval);
 	
 		/* Receive a datagram */
 		if (n > 0) {
-			fromlen = sizeof(struct sockaddr_in);
-			n = Recvfrom(s, rbuf, BUFLEN-1, 0, (struct sockaddr *) &from, (socklen_t*) &fromlen);
+			from_len = sizeof(struct sockaddr_in);
+			n = Recvfrom(s, rbuf, BUFLEN-1, 0, (struct sockaddr *) &from, (socklen_t*) &from_len);
 		  rbuf[n] = '\0';
-			fprintf(stdout, "Received response: %s\n", rbuf);
+			fprintf(stdout, "- Received response: %s\n", rbuf);
 			finished = 1;
 		} 
 	}
 	
 	if (i==5) {
-		fprintf(stdout, "No response received after %d seconds\n", TIMEOUT);
+		fprintf(stdout, "- No response received after %d seconds\n", TIMEOUT);
 	}
 	
 	/* Close the socket connection */
-	fprintf(stdout, "Closing the socket connection\n");
+	fprintf(stdout, "Closing the socket connection...\n");
 	closesocket(s);
-	fprintf(stdout, "OK.\n");
+	fprintf(stdout, "- OK. Closed.\n");
 	
 	/* Release resources (only for Windows) */
 	SockCleanup();
