@@ -1,8 +1,10 @@
-/**********************************************************************
- ***************************MY LIBRARY*********************************
- *********************************************************************/
-
 #include "mylibrary.h"
+
+/* Break */
+void br(void) {
+	fprintf(stdout, "\n");
+	return;
+}
 
 /* Handle fatal error */
 void err_fatal(char* message) {
@@ -34,31 +36,9 @@ void check_uint16_t(char* buf, uint16_t* port) {
 	return;
 }
 
-/* Print a string on the console, read a line and empties the input buffer */
-int mygetline(char* line, size_t maxline, char* string) {
-	char	ch;
-	size_t 	i;
-
-	fprintf(stdout, "%s", string);
-	for (i=0; i<maxline-1 && (ch = getchar()) != '\n' && ch != EOF; i++) {
-		*line++ = ch;
-	}
-	*line = '\0';
-	
-	while (ch != '\n' && ch != EOF) {
-		ch = getchar();
-	}
-	
-	if (ch == EOF) {
-		return(EOF);
-	} else { 
-		return 1; 
-	}
-}
-
 /* Checks if the user inputs "end" or "stop" */
-int isendorstop(char *buf) {
-	return (!strcmp(buf, "end\n") || !strcmp(buf, "stop\n"));
+int isEndOrStop(char *buf) {
+	return (!strcmp(buf, "end") || !strcmp(buf, "stop"));
 }
 
 /* Get IP address from arguments */
@@ -70,7 +50,7 @@ void setIParg(char* string, struct in_addr* addr) {
 /* Get IP address from input */
 void setIPin(struct in_addr* addr) {
 	char buf[BUFLEN];
-	mygetline(buf, BUFLEN, "Enter server IPv4 address (dotted notation): ");
+	getLine(buf, BUFLEN, "Enter host IPv4 address (dotted notation): ");
 	Inet_aton(buf, addr);
 	return;
 }
@@ -84,9 +64,24 @@ uint16_t setPortarg(char* string, uint16_t* port_h) {
 /* Get port number from input */
 uint16_t setPortin(uint16_t* port_h) {
 	char buf[BUFLEN];
-	mygetline(buf, BUFLEN, "Enter port number: ");
+	getLine(buf, BUFLEN, "Enter port number: ");
 	check_uint16_t(buf, port_h);
 	return htons(*port_h);
+}
+
+/* Show an address written in dotted decimal notation */
+void showAddress(struct sockaddr_in *sa) {
+	uint32_t ip_addr;
+  unsigned char *ip_str;
+
+	ip_addr  = sa->sin_addr.s_addr; 
+	ip_str 	= (unsigned char *) &ip_addr;
+	
+	fprintf(stdout, "%d.", ip_str[0] );
+	fprintf(stdout, "%d.", ip_str[1] );
+	fprintf(stdout, "%d.", ip_str[2] );
+	fprintf(stdout, "%d:", ip_str[3] );
+	fprintf(stdout, "%u\n", ntohs(sa->sin_port));
 }
 
 /* Initialization (only for Windows) */
@@ -208,6 +203,7 @@ void Sendto (int fd, void* buf, size_t nbytes, int flags, const struct sockaddr*
 	return;
 }
 
+/* Add I/O multiplexing behaviour */
 int Select(int nfd, fd_set* readfile, fd_set* writefile, fd_set* exceptfd, struct timeval* timeOut) {
 	int n;
 	n = select(nfd, readfile, writefile, exceptfd, timeOut);
@@ -217,6 +213,7 @@ int Select(int nfd, fd_set* readfile, fd_set* writefile, fd_set* exceptfd, struc
 	return n;
 }
 
+/* Receive a datagram through UDP */
 int Recvfrom(int socket, void* buffer, size_t len, int flags, struct sockaddr* from, socklen_t* addrlen) {
 	int n;
 	n = recvfrom(socket, buffer, len, flags, from, addrlen);
@@ -361,10 +358,12 @@ ssize_t readn(int fd, char* buf, size_t nbytes) {
 		if (nread > 0) {
 			nleft -= nread;
 			lbuf += nread;
-		} else if (nread == 0) { // EOF
+		} else if (nread == 0) { 
+				// EOF
 				break;
-		} else {	// error
-			return (nread);
+		} else {	
+				// error
+				return (nread);
 		}
 	}
 	
@@ -390,10 +389,12 @@ ssize_t recvn(SOCKET s, char* buf, size_t nbytes) {
 		if (nread > 0) {
 			nleft -= nread;
 			lbuf += nread;
-		} else if (nread == 0) { // connection closed by party
+		} else if (nread == 0) { 
+				// Connection closed by party
 				break;
-		} else {	// error
-			return (nread);
+		} else {	
+				// Error
+				return (nread);
 		}
 	}
 	
@@ -406,6 +407,28 @@ void Recvn(SOCKET s, char* buf, size_t nbytes) {
 	}
 	
 	return;
+}
+
+/* Print a string on the console, read a line, substitutes EOL with '\0' and empties the input buffer */
+int getLine(char* line, size_t maxline, char* string) {
+	char	ch;
+	size_t 	i;
+
+	fprintf(stdout, "%s", string);
+	for (i=0; i<maxline-1 && (ch = getchar()) != '\n' && ch != EOF; i++) {
+		*line++ = ch;
+	}
+	*line = '\0';
+	
+	while (ch != '\n' && ch != EOF) {
+		ch = getchar();
+	}
+	
+	if (ch == EOF) {
+		return(EOF);
+	} else { 
+		return 1; 
+	}
 }
 
 /* Reads a line from stream socket s to buffer buf, including the final '\n' */
@@ -422,19 +445,21 @@ ssize_t readlineS (SOCKET s, char *buf, size_t maxlen) {
 	    	if (c == '\n') {
 					break;
 				}
-	    } else if (nread == 0) {	// connection closed by other party 
+	    } else if (nread == 0) {	
+	    		// Connection closed by party
 	    		*buf = 0;
 	    		return (n-1);
-			} else {	// error
+			} else {			
+					// Error
 	    		return -1;
 	    }
     }
     
     *buf = 0;
-    return (n);
+    return n;
 }
 
-ssize_t ReadlineS(SOCKET s, void *buf, size_t maxlen) {
+ssize_t ReadlineS(SOCKET s, char *buf, size_t maxlen) {
 	ssize_t n;
 
 	if ((n = readlineS(s, buf, maxlen)) < 0) {

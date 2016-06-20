@@ -5,7 +5,11 @@
 #define MSG_OK "+OK\r\n"
 #define MSG_QUIT "QUIT"
 
-int receiver(SOCKET);
+int n_children;
+pid_t *pids;
+
+int service(SOCKET);
+void sigintHandler(int sig);
 
 int main(int argc, char** argv) {
 
@@ -13,11 +17,32 @@ int main(int argc, char** argv) {
 	struct sockaddr_in saddr, caddr;  // server and client address structures
 	uint16_t lport_n, lport_h; 				// server port number by htons()
 	int backlog = 2;									// pending requests queue length
-	socklen_t caddr_len;							// socket length
-	int retValue;
+	socklen_t caddr_len;							// client address length
+	int retValue;											// service() returning status
+	int i;
 	
 	/* Check number of arguments */
-	checkArg(argc, 2);
+	checkArg(argc, 3);
+	
+	/* The number of children */
+	n_children = atoi(argv[2]);
+	if (n_children > 10) {
+		fprintf(stderr, "- ERROR. Children must be at most 10.\n");
+		return -1;
+	}
+	
+	/* Alloc memory for pids */
+	pids = (pid_t*)malloc(n_children*sizeof(pid_t));
+	if (pids == NULL) {
+		fprintf(stderr, "- ERROR allocating pids.\n");
+		return -1;
+	}
+	
+	/* Instantiate a signal handler for SIGINT */
+	Signal(SIGINT, sigintHandler);
+
+	/* Initialize the socket API (only for Windows) */
+	SockStartup();
 
 	/* Set port number  */
 	lport_n = setPortarg(argv[1], &lport_h);
@@ -43,27 +68,55 @@ int main(int argc, char** argv) {
 	fprintf(stdout, "- OK. Socket is listening on ");
 	showAddress(&saddr);
 	
-	/* Main loop */
-	while(1) {
+	for (i=0; i<n_children; i++) {
+		
+		if ((pids[i] = fork()) < 0) {
+			fprintf(stderr, "- ERROR. fork() failed.\n");
+		} else if ((pids[i]) > 0) {
+			// The parent
+		} else {
+			// The child
+			while(1) {
+				/* Accept connection requests */
+				br();
+				caddr_len = sizeof(struct sockaddr_in);
+				s_acceptor = Accept(s, (struct sockaddr*) &caddr, &caddr_len);
+				fprintf(stdout, "- New connection from client ");
+				showAddress(&caddr);
+				
+				retValue = service(s_acceptor);
+				
+				closesocket(s_acceptor);
+				fprintf(stdout, "--- Connection closed by %s", (retValue == 0) ? "client\n" : "server\n");
+				br();
+			}
+		}
+		
+	}
 	
-		/* Accept connection requests */
-		br();
-		caddr_len = sizeof(struct sockaddr_in);
-		fprintf(stdout, "Waiting for connection requests...\n");
-		s_acceptor = Accept(s, (struct sockaddr*) &caddr, &caddr_len);
-		fprintf(stdout, "- New connection from client ");
-		showAddress(&caddr);
-		
-		retValue = receiver(s_acceptor);
-		
-		closesocket(s_acceptor);
-		fprintf(stdout, "--- Connection closed by %s", (retValue == 0) ? "client" : "server");
+	while(1) {
+		pause();
 	}
 	
 	return 0;
 }
 
-int receiver(SOCKET s) {
+/* Terminate all children when cntrl-c */
+void sigintHandler(int sig) {
+	int i;
+	
+	fprintf(stdout, "\n--- SIGINT received, terminating...\n");
+	
+	for (i=0; i<n_children; i++) {
+		kill(pids[i], SIGTERM);
+	}
+	
+	while (wait(NULL) > 0);
+	
+	exit(0);
+}
+
+int service(SOCKET s) {
 
 	char buf[BUFLEN+1];								// transmitter and receiver buffer
 	char c, filename[FILELEN];
@@ -72,8 +125,9 @@ int receiver(SOCKET s) {
 	struct stat fileinfo;
 	FILE* fp;
 	uint32_t nBytes, nSeconds, mTime, size;
-	
+
 	while(1) {
+	
 		/* Read a message */
 		nread = 0;
 		finished = 0;
@@ -91,7 +145,7 @@ int receiver(SOCKET s) {
 		if (nread == 0) {
 			return 0;
 		}
-		
+	
 		/* Append the \0 at the end of the string */
 		buf[nread] = '\0';
 		while((nread > 0) && ((buf[nread-1] == '\r') || (buf[nread-1] == '\n'))) {
@@ -101,12 +155,12 @@ int receiver(SOCKET s) {
 		
 		/* Print the message */
 		fprintf(stderr, "--- Received message: %s\n", buf);
-		
+	
 		/* Compute the command and reply to the client according to it */
 		if (nread > strlen(MSG_GET) && strncmp(buf, MSG_GET, strlen(MSG_GET)) == 0) {
 			/* If the command is GET */
 			strcpy(filename, buf+4);
-			
+		
 			if (stat(filename, &fileinfo) == 0) {
 				// The file can be read correctly
 				fp = fopen(filename, "rb");
@@ -116,14 +170,14 @@ int receiver(SOCKET s) {
 				}
 				size = (uint32_t) fileinfo.st_size;
 				mTime = (uint32_t) fileinfo.st_mtime;
-				
+			
 				// Write the response message
 				nwritten = write(s, MSG_OK, strlen(MSG_OK)*sizeof(char));
 				if (nwritten != strlen(MSG_OK)*sizeof(char)) {
 					fprintf(stderr, "--- ERROR. write() of MSG_OK failed.\n");
 					return 0;
 				}
-				
+			
 				// Write the number of bytes of the file
 				nBytes = htonl(size);
 				nwritten = write(s, &nBytes, sizeof(uint32_t));
@@ -139,7 +193,7 @@ int receiver(SOCKET s) {
 					fprintf(stderr, "--- ERROR. write() of file timestamp failed.\n");
 					return 0;
 				}
-				
+			
 				// Write the file itself
 				for (i=0; i<size; i++) {
 					nread = fread(&c, sizeof(char), 1, fp);
@@ -149,16 +203,16 @@ int receiver(SOCKET s) {
 						return 0;
 					}
 				}
-				
+			
 				// File correctly sent
 				fprintf(stdout, "--- +OK message sent.\n");
-				
+			
 				// Close file
 				if (fclose(fp) != 0) {
 					fprintf(stderr, "--- ERROR. fclose() failed.\n");
 					return 1;
 				}
-				
+			
 			} else {
 				// There is some error regarding the file
 				fprintf(stderr, "--- ERROR. Something goes wrong with the file.\n");
@@ -188,4 +242,6 @@ int receiver(SOCKET s) {
 		}
 		
 	}
+	
+	return 1;
 }

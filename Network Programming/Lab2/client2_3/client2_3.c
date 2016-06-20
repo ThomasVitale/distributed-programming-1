@@ -1,4 +1,4 @@
-#include "../mylibrary.h"
+#include "../../mylibrary.h"
 
 #define MSG_ERR "-ERR"
 #define MSG_OK "+OK"
@@ -82,12 +82,12 @@ int main(int argc, char** argv) {
 				sprintf(fileDwnld, "Dwnld_%s", filename); // filename of received file
 				
 				// Read the file size
-				Read(s, rbuf, 4*sizeof(char));
+				Read(s, rbuf, sizeof(uint32_t));
 				fileBytes = ntohl(*(uint32_t*)rbuf);
 				fprintf(stdout, "--- File size: %u\n", fileBytes);
 				
 				// Read the file timestamp
-				Read(s, rbuf, 4*sizeof(char));
+				Read(s, rbuf, sizeof(uint32_t));
 				timeStamp = ntohl(*(uint32_t*)rbuf);
 				fprintf(stdout, "--- File timestamp: %u\n", timeStamp);
 				
@@ -99,12 +99,10 @@ int main(int argc, char** argv) {
 				}
 				Fclose(fp);
 				fprintf(stdout, "--- File written: %s\n", fileDwnld);
-			} else if ((nread >= strlen(MSG_ERR)) && (strncmp(rbuf, MSG_ERR, strlen(MSG_ERR)) == 0)) {
-				// Error message
-				fprintf(stdout, "--- ERR message received.\n");
 			} else {
 				// Protocol error
 				fprintf(stderr, "--- ERROR. Something goes wrong with the communication protocol.\n");
+				break;
 			}
 		}
 	}

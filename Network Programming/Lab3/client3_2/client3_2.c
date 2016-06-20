@@ -1,0 +1,180 @@
+#include "../../mylibrary.h"
+
+#define MSG_OK "+OK"
+#define MSG_QUIT "QUIT\r\n"
+#define MSG_ERR "-ERR"
+
+int main(int argc, char** argv) {
+
+	char buf[BUFLEN], rbuf[BUFLEN];	// transmitter and receiver buffers
+	SOCKET s; 											// socket
+	struct in_addr sIPaddr;					// server IP address structure
+	struct sockaddr_in saddr; 			// server address structure
+	uint16_t tport_n, tport_h;			// server port number by htons()
+	char filename[FILELEN+1], fileDwnld[FILELEN+1], c1, c2;
+	FILE* fp;
+	int nread, fileCounter=0, readFileFlag=0, endFlag=0;
+	uint32_t fileBytes, filePointer, timeStamp;
+	fd_set cset;
+
+	/* Check number of arguments */
+	checkArg(argc, 3);
+	
+	/* Set IP address and port number of Server */
+	setIParg(argv[1], &sIPaddr);
+	tport_n = setPortarg(argv[2], &tport_h);
+
+	/* Create the socket */
+	fprintf(stdout, "Creating the socket...\n");
+	s = Socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	fprintf(stdout, "- OK. Socket fd: %d\n", s);
+	
+	/* Prepare server address structure */
+	saddr.sin_family = AF_INET;
+	saddr.sin_port = tport_n;
+	saddr.sin_addr = sIPaddr;
+
+	/* Send connection request */
+	fprintf(stdout, "Connecting to target address...\n");
+	Connect(s, (struct sockaddr*) &saddr, sizeof(saddr));
+	fprintf(stdout, "- OK. Connected to ");
+	showAddress(&saddr);
+	
+	br();
+	
+	/* Ready to accept commands */
+	fprintf(stdout, "Input a command: GET file, Q, A:\n");
+	
+	/* Main */
+	while(1) {
+	
+		if ((readFileFlag == 0) && (endFlag == 1)) {
+			break;
+		}
+		
+		/* Set socket and stdin */
+		FD_ZERO(&cset);
+		FD_SET(s, &cset);
+		FD_SET(fileno(stdin), &cset);
+		Select(s+1, &cset, NULL, NULL, NULL);
+		
+		/* The socket is readable */
+		if (FD_ISSET(s, &cset)) {
+		
+			if (readFileFlag == 0) {
+				/* Response from server */
+				nread = 0;
+				do {
+					Read(s, &c1, sizeof(char));
+					rbuf[nread++] = c1;
+				} while((c1 != '\n') && (nread < BUFLEN-1));
+				rbuf[nread] = '\0';
+				while((nread > 0) && ((rbuf[nread-1] == '\r') || (rbuf[nread-1] == '\n'))) {
+					rbuf[nread-1] = '\0';
+					nread--;
+				}
+				
+				/* Compute the type of message received and behave according to it */
+				if ((nread >= strlen(MSG_OK)) && (strncmp(rbuf, MSG_OK, strlen(MSG_OK)) == 0)) {
+				
+					// OK, right response received
+					fprintf(stdout, "--- +OK message received.\n");
+					sprintf(fileDwnld, "Dwnld_%d", fileCounter); // filename of received file
+					fileCounter++;
+					
+					// Read the file size
+					Read(s, rbuf, sizeof(uint32_t));
+					fileBytes = ntohl(*(uint32_t*)rbuf);
+					fprintf(stdout, "--- File size: %u\n", fileBytes);
+				
+					// Read the file timestamp
+					Read(s, rbuf, sizeof(uint32_t));
+					timeStamp = ntohl(*(uint32_t*)rbuf);
+					fprintf(stdout, "--- File timestamp: %u\n", timeStamp);
+					
+					// Open file for writing
+					fp = Fopen(fileDwnld, "wb");
+					readFileFlag = 1;
+					filePointer = 0;
+					fprintf(stdout, "--- File %s opened for writing...\n", fileDwnld);
+					
+				} else if ((nread >= strlen(MSG_ERR)) && (strncmp(rbuf, MSG_ERR, strlen(MSG_ERR)) == 0)) {
+					// ERROR
+					fprintf(stderr, "--- ERROR. Message received: %s.\n", rbuf);
+					break;
+				} else {
+					// ERROR
+					fprintf(stderr, "--- ERROR. Something goes wrong with the communication protocol.\n");
+					break;
+				}
+				
+			} else if (readFileFlag == 1) {
+				
+				/* Read a character from the buffer and write it into the file */
+				Read(s, &c2, sizeof(char));
+				Fwrite(&c2, sizeof(char), 1, fp);
+				filePointer++;
+				
+				/* Check if EOF */
+				if (filePointer == fileBytes) {
+					Fclose(fp);
+					fprintf(stdout, "--- File received and written: %s\n", fileDwnld);
+					readFileFlag = 0;
+				}
+			
+			} else {
+				// ERROR
+				fprintf(stderr, "--- ERROR. Something goes wrong with the readFileFlag.\n");
+				break;
+			}
+			
+		}		
+		
+		/* The stdin is readable */
+		if (FD_ISSET(fileno(stdin), &cset)) {
+		
+			if (fgets(buf, BUFLEN, stdin) == NULL) {
+				buf[0] = 'Q';
+			}
+			
+			switch(buf[0]) {
+				case 'G':
+				case 'g':
+					sscanf(buf, "%*s %s", filename);
+					sprintf(buf, "GET %s\r\n", filename);
+					Write(s, buf, strlen(buf)*sizeof(char));
+					fprintf(stdout, "- GET command sent.\n");
+					break;
+				case 'Q':
+				case 'q':
+					sprintf(buf, MSG_QUIT);
+					Write(s, buf, strlen(buf)*sizeof(char));
+					fprintf(stdout, "- Q command sent.\n");
+					Shutdown(s, SHUT_WR);
+					endFlag = 1;
+					fprintf(stdout, "--- Waiting for file transfer to terminate...\n");
+					return 0;
+				case 'A':
+				case 'a':
+					fprintf(stdout, "--- Closing connection immediately...\n");
+					closesocket(s);
+					fprintf(stdout, "--- OK. Closed.\n");
+					return 0;
+				default:
+					fprintf(stdout, "- Unknown command %c.\n", buf[0]);
+					break;
+			}
+			
+		}
+		
+	}
+	
+	br();
+	
+	/* Close the socket connection */
+	fprintf(stdout, "Closing the socket connection...\n");
+	closesocket(s);
+	fprintf(stdout, "- OK. Closed.\n");
+
+	return 0;
+}
