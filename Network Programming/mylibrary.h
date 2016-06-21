@@ -16,8 +16,9 @@
 #include <rpc/xdr.h>
 
 #define BUFLEN 255
+#define MAXBUF 1024
 #define FILELEN 1023
-#define TIMEOUT 3
+#define TIMEOUT 10
 #define INVALID_SOCKET -1
 #define closesocket(x) close(x)
 
@@ -66,12 +67,16 @@ size_t Fread(void*, size_t, size_t, FILE*);
 size_t Fwrite(const void*, size_t, size_t, FILE*);
 
 /* Communication functions */
+ssize_t readn(int, char*, size_t);
 void Readn(int, char*, size_t);
+ssize_t recvn(SOCKET, char*, size_t);
 void Recvn(SOCKET, char*, size_t);
 int getLine(char*, size_t, char*);
 ssize_t readlineS (SOCKET, char*, size_t);
 ssize_t ReadlineS (SOCKET, char*, size_t);
+ssize_t writen(int, char*, size_t);
 void Writen (int, char*, size_t);
+ssize_t sendn(SOCKET, char*, size_t);
 void Sendn (SOCKET, char*, size_t);
 
 /* Signals */

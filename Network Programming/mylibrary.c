@@ -105,7 +105,7 @@ SOCKET Socket(int family, int type, int protocol) {
 	s = socket(family, type, protocol);
 	if (s == INVALID_SOCKET) {
 		err_fatal("ERROR. socket() failed");
-		return -1;
+		return 1;
 	}
 	
 	return s;
@@ -155,7 +155,7 @@ SOCKET Accept(int socket, struct sockaddr *srcaddr, socklen_t *addr_len) {
 	s = accept(socket, srcaddr, addr_len);
 	if (s == -1) {
 		err_fatal("ERROR. accept() failed");
-		return -1;
+		return 1;
 	}
 	
 	return s;
