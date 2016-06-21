@@ -278,6 +278,7 @@ int serviceXDR(SOCKET s) {
 	uint32_t mTime, size;
 	char *fileContent;
 	ssize_t nread;
+	int retValue = 1;
 	
 	/* Open FILE reading stream and bind it to the corresponding XDR stream */
 	stream_socket_r = fdopen(s, "r");
@@ -303,12 +304,9 @@ int serviceXDR(SOCKET s) {
 		/* Receive a message */
 		reqMessage.message_u.filename = (char*) malloc(FILELEN*sizeof(char));
 		if (!xdr_message(&xdrs_in, &reqMessage)) {
-			xdr_destroy(&xdrs_in);
-			fclose(stream_socket_r);
-			xdr_destroy(&xdrs_out);
-			fclose(stream_socket_w);
 			free(reqMessage.message_u.filename);
-			return 0;
+			retValue = 0;
+			break;
 		}
 		fprintf(stdout, "--- Received message.\n");
 		
@@ -327,12 +325,9 @@ int serviceXDR(SOCKET s) {
 				fp = fopen(reqMessage.message_u.filename, "rb");
 				if (fp == NULL) {
 					fprintf(stderr, "--- ERROR. fopen() failed.\n");
-					xdr_destroy(&xdrs_in);
-					fclose(stream_socket_r);
-					xdr_destroy(&xdrs_out);
-					fclose(stream_socket_w);
 					free(reqMessage.message_u.filename);
-					return 0;
+					retValue = 0;
+					break;
 				}
 				
 				// Write the file itself
@@ -340,12 +335,10 @@ int serviceXDR(SOCKET s) {
 				nread = fread(fileContent, sizeof(char), size, fp);
 				if (nread != size) {
 						fprintf(stderr, "--- ERROR reading the file.\n");
-						xdr_destroy(&xdrs_in);
-						fclose(stream_socket_r);
-						xdr_destroy(&xdrs_out);
-						fclose(stream_socket_w);
+						free(fileContent);
 						free(reqMessage.message_u.filename);
-						return 0;
+						retValue = 0;
+						break;
 				}
 				
 				// Send OK message
@@ -355,27 +348,22 @@ int serviceXDR(SOCKET s) {
 				resMessage.message_u.fdata.contents.contents_val = fileContent;
 				if (!xdr_message(&xdrs_out, &resMessage)) {
 					fprintf(stderr, "--- ERROR. Response xdr_message() failed.\n");
-					xdr_destroy(&xdrs_in);
-					fclose(stream_socket_r);
-					xdr_destroy(&xdrs_out);
-					fclose(stream_socket_w);
+					free(fileContent);
 					free(reqMessage.message_u.filename);
-					return 0;
+					retValue = 0;
+					break;
 				}
 				fprintf(stdout, "--- +OK message sent.\n");
 				fflush(stream_socket_w);
+				free(fileContent);
 			
 				// Close file
 				if (fclose(fp) != 0) {
 					fprintf(stderr, "--- ERROR. fclose() failed.\n");
-					xdr_destroy(&xdrs_in);
-					fclose(stream_socket_r);
-					xdr_destroy(&xdrs_out);
-					fclose(stream_socket_w);
 					free(reqMessage.message_u.filename);
-					return 1;
+					retValue = 1;
+					break;
 				}
-				free(fileContent);
 				
 			} else {
 				/* There is some error regarding the file */
@@ -383,12 +371,9 @@ int serviceXDR(SOCKET s) {
 				fprintf(stdout, "--- ERROR. file not found.\n");
 				resMessage.tag = ERR;
 				if (!xdr_message(&xdrs_out, &resMessage)) {
-					xdr_destroy(&xdrs_in);
-					fclose(stream_socket_r);
-					xdr_destroy(&xdrs_out);
-					fclose(stream_socket_w);
 					free(reqMessage.message_u.filename);
-					return 0;
+					retValue = 0;
+					break;
 				}
 				fprintf(stdout, "--- -ERR message sent.\n");
 				fflush(stream_socket_w);
@@ -398,24 +383,18 @@ int serviceXDR(SOCKET s) {
 			/* If the command is QUIT */
 			
 			fprintf(stdout, "--- Client asked to terminate the connection.\n");
-			xdr_destroy(&xdrs_in);
-			fclose(stream_socket_r);
-			xdr_destroy(&xdrs_out);
-			fclose(stream_socket_w);
 			free(reqMessage.message_u.filename);
-			return 0;
+			retValue = 0;
+			break;
 		} else {
 			/* If there is an error */
 			
 			fprintf(stdout, "--- ERROR. Wrong command.\n");
 			resMessage.tag = ERR;
 			if (!xdr_message(&xdrs_out, &resMessage)) {
-				xdr_destroy(&xdrs_in);
-				fclose(stream_socket_r);
-				xdr_destroy(&xdrs_out);
-				fclose(stream_socket_w);
 				free(reqMessage.message_u.filename);
-				return 0;
+				retValue = 0;
+				break;
 			}
 			fprintf(stdout, "--- -ERR message sent.\n");
 			fflush(stream_socket_w);
@@ -431,5 +410,5 @@ int serviceXDR(SOCKET s) {
 	xdr_destroy(&xdrs_out);
 	fclose(stream_socket_w);
 	
-	return 1;
+	return retValue;
 }
